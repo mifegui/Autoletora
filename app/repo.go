@@ -10,9 +10,9 @@ func init() {
 	var e Evento
 	e.Event = "buy"
 	e.Revenue = 49
-	var d Data
-	d.Key = "store_name"
-	d.Value = "Centauro"
+	var d = make(map[string]interface{})
+	d["Key"] = "store_name"
+	d["Value"] = "Centauro"
 	e.Custom_data = append(e.Custom_data, d)
 	RepoCriarEvento(e)
 }

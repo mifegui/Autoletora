@@ -30,6 +30,12 @@ var routes = Routes{
 		"/coletar",
 		EventoColetar,
 	},
+	Route{
+		"TimelineFazer",
+		"GET",
+		"/timeline",
+		TimelineFazer,
+	},
 	//	Route{
 	//		"TodoShow",
 	//		"GET",
