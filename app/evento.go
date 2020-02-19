@@ -4,12 +4,11 @@ import "time"
 
 type Eventos []Evento
 type Events struct {
-	Eventos Eventos `json:"events"`
+	Eventos Eventos `json:"events" bson:"events"`
 }
 type Evento struct {
-	Id          int
-	Event       string                   `json:"event"`
-	Timestamp   time.Time                `json:"timestamp"`
-	Revenue     int                      `json:"revenue"`
-	Custom_data []map[string]interface{} `json:"custom_data"`
+	Event       string                   `json:"event" bson:"event"`
+	Timestamp   time.Time                `json:"timestamp" bson:"timestamp"`
+	Revenue     int                      `json:"revenue" bson:"revenue"`
+	Custom_data []map[string]interface{} `json:"custom_data" bson:"custom_data"`
 }

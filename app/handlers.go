@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"go.mongodb.org/mongo-driver/bson"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"sort"
+	"time"
 )
 
 // Index retorna ao webserver o fato de que a api está rodando.
@@ -17,11 +20,29 @@ func Index(w http.ResponseWriter, r *http.Request) {
 // EventoIndex retorna em json para o webserver todos os eventos coletados
 // e armazenados na database até agora.
 func EventoIndex(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(eventos); err != nil {
-		panic(err)
+	w.Header().Set("content-type", "application/json")
+	var evts Events
+	collection := client.Database("autoletora").Collection("eventos")
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
 	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var e Evento
+		cursor.Decode(&e)
+		evts.Eventos = append(evts.Eventos, e)
+	}
+	if err := cursor.Err(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+
+	json.NewEncoder(w).Encode(evts)
 }
 
 //func TodoShow(w http.ResponseWriter, r *http.Request) {
@@ -76,12 +97,11 @@ func EventoColetar(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	e := RepoCriarEvento(evento) // Guarda na database
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(e); err != nil {
-		panic(err)
-	}
+	w.Header().Set("content-type", "application/json")
+	collection := client.Database("autoletora").Collection("eventos")
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	result, _ := collection.InsertOne(ctx, evento)
+	json.NewEncoder(w).Encode(result)
 }
 
 // TimelineFazer consome a api endpoint e agrupa os eventos do endpoint em uma timeline que é retornada para o webserver.
@@ -107,7 +127,7 @@ func TimelineFazer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Agora a struct endpoint está preenchida com os dados do .json
-	// Passaremos pra struct formatada
+	// Passaremos para a struct formatada
 	m := make(map[string]Transaction)         // mapa cuja key é a string de transaction_id e o valor é a própria struct transaction
 	for _, evento := range endpoint.Eventos { // Para cada evento
 		var trans Transaction // construiremos uma transação
@@ -136,7 +156,7 @@ func TimelineFazer(w http.ResponseWriter, r *http.Request) {
 				tpassada.Revenue = trans.Revenue
 				tpassada.Store_name = trans.Store_name
 			} else if evento.Event == "comprou-produto" {
-				tpassada.Products = append(tpassada.Products, prod)
+				tpassada.Products = append(tpassada.Products, prod) // adicione prod na lista de prdutos
 			}
 			m[trans.Transaction_id] = tpassada // troca a antiga pela modificada
 		} else {
