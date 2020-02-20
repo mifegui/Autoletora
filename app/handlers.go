@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -45,31 +47,60 @@ func EventoIndex(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(evts)
 }
 
-//func TodoShow(w http.ResponseWriter, r *http.Request) {
-//	vars := mux.Vars(r)
-//	var todoId int
-//	var err error
-//	if todoId, err = strconv.Atoi(vars["todoId"]); err != nil {
-//		panic(err)
-//	}
-//	todo := RepoFindTodo(todoId)
-//	if todo.Id > 0 {
-//		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//		w.WriteHeader(http.StatusOK)
-//		if err := json.NewEncoder(w).Encode(todo); err != nil {
-//			panic(err)
-//		}
-//		return
-//	}
-//
-//	// If we didn't find it, 404
-//	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	w.WriteHeader(http.StatusNotFound)
-//	if err := json.NewEncoder(w).Encode(jsonErr{Code: http.StatusNotFound, Text: "Not Found"}); err != nil {
-//		panic(err)
-//	}
-//
-//}
+// EventoComplete recebe uma string (/complete/bu) e retorna possíveis formas de completar (buy) usando eventos presentes na database
+func EventoComplete(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	var input string
+	input = vars["input"]
+	// Procurar matchs na database
+	var mts Completed
+	collection := client.Database("autoletora").Collection("eventos")
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	cursor, err := collection.Find(ctx, bson.M{}) // Procura pela database inteira
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var e Evento
+		cursor.Decode(&e)
+		if strings.HasPrefix(e.Event, input) {
+			existe := false
+			for _, m := range mts.Matchs {
+				if m == e.Event {
+					existe = true
+					break
+				}
+			}
+			if existe == false {
+				mts.Matchs = append(mts.Matchs, e.Event)
+			}
+		}
+	}
+	if err := cursor.Err(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+
+	//
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(mts); err != nil {
+		panic(err)
+	}
+	return
+
+	// If we didn't find it, 404
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusNotFound)
+	if err := json.NewEncoder(w).Encode(jsonErr{Code: http.StatusNotFound, Text: "Not Found"}); err != nil {
+		panic(err)
+	}
+
+}
 
 /*
 Teste com esse comando:

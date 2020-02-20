@@ -36,10 +36,10 @@ var routes = Routes{
 		"/timeline",
 		TimelineFazer,
 	},
-	//	Route{
-	//		"TodoShow",
-	//		"GET",
-	//		"/todos/{todoId}",
-	//		TodoShow,
-	//	},
+	Route{
+		"EventoComplete",
+		"GET",
+		"/complete/{input}",
+		EventoComplete,
+	},
 }
