@@ -1,50 +1,35 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
-	"go.mongodb.org/mongo-driver/bson"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"sort"
-	"strings"
-	"time"
 )
 
 // Index retorna ao webserver o fato de que a api está rodando.
 func Index(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "Rodando\n")
+	fmt.Fprint(w, "Rodando... \n\n"+
+		"/eventos para ver eventos armazenados\n"+
+		"/coletar é onde você envia POST requests com json no padrão da struct event para serem armazenados\n"+
+		"/complete/{input} onde a função de autocomplete retornará, em json, eventos armazenados que combinam com o seu input\n"+
+		"/timeline onde será mostrado o resultado do agrupamento e ordenação dos eventos do endpoint externo")
 }
 
 // EventoIndex retorna em json para o webserver todos os eventos coletados
 // e armazenados na database até agora.
 func EventoIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
-	var evts Events
-	collection := client.Database("autoletora").Collection("eventos")
-	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-	cursor, err := collection.Find(ctx, bson.M{})
+	evts, err := getEventos(w) // Pra database
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
-		return
+		log.Println(err)
+	} else {
+		json.NewEncoder(w).Encode(evts)
 	}
-	defer cursor.Close(ctx)
-	for cursor.Next(ctx) {
-		var e Evento
-		cursor.Decode(&e)
-		evts.Eventos = append(evts.Eventos, e)
-	}
-	if err := cursor.Err(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
-		return
-	}
-
-	json.NewEncoder(w).Encode(evts)
 }
 
 // EventoComplete recebe uma string (/complete/bu) e retorna possíveis formas de completar (buy) usando eventos presentes na database
@@ -52,51 +37,16 @@ func EventoComplete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	var input string
 	input = vars["input"]
-	// Procurar matchs na database
-	var mts Completed
-	collection := client.Database("autoletora").Collection("eventos")
-	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-	cursor, err := collection.Find(ctx, bson.M{}) // Procura pela database inteira
+
+	mts, err := getMatch(w, input) // Pra database
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
-		return
-	}
-	defer cursor.Close(ctx)
-	for cursor.Next(ctx) {
-		var e Evento
-		cursor.Decode(&e)
-		if strings.HasPrefix(e.Event, input) {
-			existe := false
-			for _, m := range mts.Matchs {
-				if m == e.Event {
-					existe = true
-					break
-				}
-			}
-			if existe == false {
-				mts.Matchs = append(mts.Matchs, e.Event)
-			}
-		}
-	}
-	if err := cursor.Err(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		log.Println(err)
 		return
 	}
 
-	//
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(mts); err != nil {
-		panic(err)
-	}
-	return
-
-	// If we didn't find it, 404
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusNotFound)
-	if err := json.NewEncoder(w).Encode(jsonErr{Code: http.StatusNotFound, Text: "Not Found"}); err != nil {
 		panic(err)
 	}
 
@@ -115,23 +65,21 @@ func EventoColetar(w http.ResponseWriter, r *http.Request) {
 	var evento Evento
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1048576)) // 1 Mega de limite para leitura
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	if err := r.Body.Close(); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	if err := json.Unmarshal(body, &evento); err != nil { // Se não conseguir codificar o json para a struct...
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(422)                                     // unprocessable entity
 		if err := json.NewEncoder(w).Encode(err); err != nil { // Mostra o erro
-			panic(err)
+			log.Println(err)
 		}
 	}
 
 	w.Header().Set("content-type", "application/json")
-	collection := client.Database("autoletora").Collection("eventos")
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, _ := collection.InsertOne(ctx, evento)
+	result := createEvento(evento) // Pra database
 	json.NewEncoder(w).Encode(result)
 }
 
@@ -142,17 +90,17 @@ func TimelineFazer(w http.ResponseWriter, r *http.Request) {
 	response, err := http.Get(urlEndpoint)
 	if err != nil {
 		fmt.Printf("A solicitação http falhou com o erro: %s\n", err)
-		panic(err)
+		log.Println(err)
 	} else {
 		data, err := ioutil.ReadAll(response.Body) // armazena os dados que queremos em data
 		if err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		if err := json.Unmarshal(data, &endpoint); err != nil { // Se não conseguir codificar o json para a struct...
 			w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 			w.WriteHeader(422)                                     // unprocessable entity
 			if err := json.NewEncoder(w).Encode(err); err != nil { // Mostra o erro
-				panic(err)
+				log.Println(err)
 			}
 		}
 	}
@@ -208,7 +156,7 @@ func TimelineFazer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(422)                                           // unprocessable entity
 	if err := json.NewEncoder(w).Encode(timelined); err != nil { // Manda o timelined
-		panic(err)
+		log.Println(err)
 	}
 
 }
