@@ -1,10 +1,15 @@
 # Executando
-No momento executa-se o aplicativo nativamente enquanto a database pode ser executado usando o docker. Suponho ser possível fazer os dois funcionarem usando o docker.
-
 Para as funcionalidades que usam database funcionar (e o app inicializar) é necessário uma database mongoDb com a porta padrão aberta. Você pode iniciar um container docker com mongoDb com o comando
 ```
-docker run -d -p 27017-27019:27017-27019 --name mongodb mongo
+docker run -d --net=host -p 27017-27019:27017-27019 --name mongodb mongo
 ```
+
+Pode-se executar o aplicativo usando o docker:
+```
+docker build -t autoletora . && docker run -d -p 8080:8080 --net=host --name autoletora autoletora
+```
+
+Depois de executado os dois comandos pode-se ver o aplicativo funcionando em `localhost:8080`
 
 ## Autocomplete
 O serviço de autocomplete completa palavras enviadas em /complete/{palavra} usando os eventos já coletados pela api coletora em /coletar
