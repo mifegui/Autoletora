@@ -154,8 +154,8 @@ func TimelineFazer(w http.ResponseWriter, r *http.Request) {
 	sort.Sort(Transactions(timelined.Trans)) // Coloque em ordem alfebética as Transactions de timelined, como especificado em timeline.go
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(422)                                           // unprocessable entity
 	if err := json.NewEncoder(w).Encode(timelined); err != nil { // Manda o timelined
+		w.WriteHeader(http.StatusOK)
 		log.Println(err)
 	}
 

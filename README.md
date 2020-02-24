@@ -1,4 +1,10 @@
 # Executando
+Baixando o código:
+```
+git clone https://github.com/mifegui/Autoletora.git
+cd Autoletora
+```
+
 Para as funcionalidades que usam database funcionar (e o app inicializar) é necessário uma database mongoDb com a porta padrão aberta. Você pode iniciar um container docker com mongoDb com o comando
 ```
 docker run -d --net=host -p 27017-27019:27017-27019 --name mongodb mongo
